@@ -1,71 +1,72 @@
-# dwa-companion README
+Understood. A "real" README focuses on utility, quick context, and clear calls to action, often starting with badges and including installation steps.
 
-This is the README for your extension "dwa-companion". After writing up a brief description, we recommend including the following sections.
+Here is the complete, final version of your `README.md`, formatted to professional standards.
 
-## Features
+---
+# DWA Companion: Template Manager (VS Code Extension)
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+| Category | Status |
+| :--- | :--- |
+| **Marketplace** | [VS Code Marketplace Link (To be inserted after publishing)] |
+| **Version** | 1.0.0 |
 
-For example if there is an image subfolder under your extension project workspace:
+## Goal
 
-\!\[feature X\]\(images/feature-x.png\)
-
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
-
-## Requirements
-
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
-
-## Extension Settings
-
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+The primary goal of the **DWA Companion** extension is to **streamline the start of Digital Wave Academy training projects** by centralizing template access and automating initial setup tasks. This allows trainees to skip configuration and focus immediately on the learning material.
 
 ---
 
-## Following extension guidelines
+## Features
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+### 1. Template Initialization (Trainee Feature)
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+This feature provides seamless access to all course resources stored on Cloudflare R2.
 
-## Working with Markdown
+| Feature | Description |
+| :--- | :--- |
+| **Access & Selection** | Run the command `DWA: Initialize a Template...` to view and select from all available training templates via a quick-pick menu. |
+| **Automated Setup** | Downloads all template files from Cloudflare R2 into the local folder of your choice. |
+| **Dependency Install** | Automatically executes the necessary dependency installation command (e.g., `pnpm install`) in a dedicated terminal, eliminating manual setup. |
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+### 2. Template Upload (Administrator Feature)
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+This command is used by administrators to update and maintain the resource library.
 
-## For more information
+| Feature | Description |
+| :--- | :--- |
+| **Secure Upload** | Run the command `DWA: Upload a Template...` to use a secured external Python script to upload a local source folder to the R2 bucket. |
+| **Manifest Update** | Instantly updates the `templates.json` manifest, making the new or updated template immediately available for all trainees. |
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+---
 
-**Enjoy!**
+## Requirements & Installation
+
+### 1. Installation
+
+Install the extension directly from the Visual Studio Code Marketplace.
+
+### 2. Requirements for Trainees
+
+**No prerequisites are required for trainees.**
+
+### 3. Requirements for Administrators (Upload Feature Only)
+
+The upload feature relies on an external Python script for secure authentication and file transfer to R2.
+
+| Requirement | Details |
+| :--- | :--- |
+| **Python** | Python 3.x must be installed and accessible in the system PATH. |
+| **Dependencies** | The required Python libraries must be installed: `pip install boto3 python-dotenv` |
+| **Configuration** | A file named `r2.env` containing your R2 write access keys (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, etc.) must be placed at the root of the extension's execution environment. **(Warning: This file must be kept secret and is not included in the public package.)** |
+
+---
+
+##  Release Notes
+
+### 1.0.0
+
+* Initial launch of the `dwa-companion` extension.
+* Added the primary command for template initialization (`dwa-companion.initTemplate`).
+* Added the administrator command for R2 template upload (`dwa-companion.uploadTemplate`) via external Python script.
+
+**[End of README.md]**

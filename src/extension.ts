@@ -5,7 +5,7 @@ import * as cp from 'child_process';
 
 // --- CONSTANTES ---
 // La variable process.env.R2_PUBLIC_URL est injectée par le build (esbuild/dotenv)
-const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || 'ERREUR_R2_URL_MANQUANTE'; 
+const R2_PUBLIC_URL = "https://pub-8ce83ca8885d4c62832aa87251a2d7ef.r2.dev/";
 const MANIFEST_URL = `${R2_PUBLIC_URL}templates.json`;
 
 // Chemin vers le script Python (à la racine de l'extension)
