@@ -19,7 +19,7 @@
       },
       {
         "command": "dwa-companion.initTemplate",
-        "title": "🚀 DWA: Initialiser un template de formation"
+        "title": "dwa-companion: Start from template"
       }
     ]
   },

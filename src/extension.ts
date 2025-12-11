@@ -1,95 +1,166 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as cp from 'child_process';
 
-/**
- * Copie récursive de fichiers/dossiers.
- * @param source Chemin source du template.
- * @param destination Chemin de destination du nouveau projet.
- */
-function copyTemplate(source: string, destination: string): void {
-    if (!fs.existsSync(destination)) {
-        fs.mkdirSync(destination, { recursive: true });
-    }
+// --- CONSTANTES ---
+// La variable process.env.R2_PUBLIC_URL est injectée par le build (esbuild/dotenv)
+const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || 'ERREUR_R2_URL_MANQUANTE'; 
+const MANIFEST_URL = `${R2_PUBLIC_URL}templates.json`;
 
-    const files = fs.readdirSync(source);
+// Chemin vers le script Python (à la racine de l'extension)
+const PYTHON_SCRIPT = path.join(vscode.extensions.getExtension('your-publisher.dwa-companion')?.extensionPath || path.join(process.cwd(), '..'), 'r2_uploader.py');
 
-    files.forEach(file => {
-        const sourceFile = path.join(source, file);
-        const destinationFile = path.join(destination, file);
-        const stat = fs.statSync(sourceFile);
 
-        if (stat.isDirectory()) {
-            copyTemplate(sourceFile, destinationFile); 
-        } else {
-            fs.copyFileSync(sourceFile, destinationFile);
-        }
-    });
+// --- INTERFACE POUR LE TYPAGE DU QUICK PICK ---
+interface TemplateQuickPickItem extends vscode.QuickPickItem {
+    templateData: {
+        name: string;
+        label: string;
+        description: string;
+        files: string[];
+        install_command: string | null;
+    };
 }
+
 
 export function activate(context: vscode.ExtensionContext) {
 
-    // Enregistrement de la commande définie dans package.json
-    let disposable = vscode.commands.registerCommand('dwa-companion.initTemplate', async () => {
+    // --- COMMANDE 1: Initialiser un Template (Lecture R2) ---
+    let disposableInit = vscode.commands.registerCommand('dwa-companion.initTemplate', async () => {
         
-        // 1. DÉFINITION ET SÉLECTION DU TEMPLATE DWA
-        const templates = [
-            { label: 'Template DWA Base', description: 'Fichiers HTML/CSS/JS de démarrage', dirName: 'dwa-base' },
-            { label: 'Template DWA Avancé', description: 'Template avec dépendances et pnpm', dirName: 'dwa-advanced' } 
-            // NOTE: Vous devrez créer le dossier 'dwa-advanced' et son package.json pour qu'il fonctionne
-        ];
+        vscode.window.showInformationMessage('Connexion à R2 pour récupérer la liste des templates...');
+
+        let manifestData: any;
+        try {
+            const response = await fetch(MANIFEST_URL);
+            if (!response.ok) {
+                throw new Error(`Erreur HTTP ${response.status} lors du téléchargement du manifeste.`);
+            }
+            manifestData = await response.json();
+        } catch (error) {
+            vscode.window.showErrorMessage(`Échec de la récupération du manifeste R2 : ${error instanceof Error ? error.message : String(error)}`);
+            return;
+        }
+
+        const templates = manifestData.templates || [];
         
-        const selectedOption = await vscode.window.showQuickPick(templates, {
+        if (templates.length === 0) {
+            vscode.window.showWarningMessage("Le manifeste est vide ou invalide.");
+            return;
+        }
+        
+        // Créer la liste d'options TYPÉE
+        const templateOptions: TemplateQuickPickItem[] = templates.map((t: any) => ({
+            label: t.label || t.name.toUpperCase(),
+            description: t.description || 'Template R2',
+            templateData: t 
+        }));
+        
+        // Sélection du template (Utilise l'interface TemplateQuickPickItem pour le typage)
+        const selectedOption = await vscode.window.showQuickPick<TemplateQuickPickItem>(templateOptions, {
             placeHolder: 'Choisissez le template DWA à initialiser...'
         });
 
-        if (!selectedOption) {
-            return; // Annulé
+        if (!selectedOption){ 
+            return;
         }
 
-        // 2. SÉLECTION DU DOSSIER DE DESTINATION
-        // Permet de choisir le dossier sur le système (essentiel quand VS Code est vierge)
+        // SÉLECTION DU DOSSIER DE DESTINATION
+        const options: vscode.OpenDialogOptions = {
+            canSelectFolders: true, canSelectFiles: false, canSelectMany: false, openLabel: 'Créer le Projet Ici'
+        };
+
+        const folderUris = await vscode.window.showOpenDialog(options);
+        if (!folderUris || folderUris.length === 0) { 
+            return;
+        }
+        
+        const destinationPath = folderUris[0].fsPath;
+
+        try {
+            // TÉLÉCHARGEMENT ET COPIE DES FICHIERS
+            const templateName = selectedOption.templateData.name;
+            vscode.window.showInformationMessage(`Téléchargement de ${selectedOption.templateData.files.length} fichiers pour ${templateName}...`);
+
+            for (const relativePath of selectedOption.templateData.files) {
+                
+                // Normaliser le chemin pour R2/URL (même si Python devrait l'avoir corrigé, c'est une sécurité)
+                const normalizedPath = relativePath.replace(/\\/g, '/'); 
+                
+                // Construction de l'URL
+                const r2Url = `${R2_PUBLIC_URL}${templateName}/${normalizedPath}`; 
+                
+                const response = await fetch(r2Url);
+                if (!response.ok) {
+                    throw new Error(`Échec du téléchargement de ${relativePath}. URL: ${r2Url}`);
+                }
+                
+                const fileContent = await response.text();
+                
+                // Écriture locale
+                const filePath = path.join(destinationPath, normalizedPath);
+                
+                const dir = path.dirname(filePath);
+                if (!fs.existsSync(dir)) {
+                    fs.mkdirSync(dir, { recursive: true });
+                }
+                
+                fs.writeFileSync(filePath, fileContent);
+            }
+
+            vscode.window.showInformationMessage(`Template DWA : ${selectedOption.label} initialisé avec succès !`);
+            
+            await vscode.commands.executeCommand('vscode.openFolder', folderUris[0]);
+
+            const installCommand = selectedOption.templateData.install_command;
+            if (installCommand) {
+                const terminal = vscode.window.createTerminal(`Installation Dépendances (${templateName})`);
+                terminal.show();
+                terminal.sendText(installCommand); 
+            }
+
+        } catch (error) {
+            vscode.window.showErrorMessage(`Échec de l'initialisation R2 : ${error instanceof Error ? error.message : String(error)}`);
+        }
+    });
+    
+    // --- COMMANDE 2: Uploader un Template (Appel Python) ---
+    let disposableUpload = vscode.commands.registerCommand('dwa-companion.uploadTemplate', async () => {
+        
+        // 1. SÉLECTION DU DOSSIER SOURCE LOCAL
         const options: vscode.OpenDialogOptions = {
             canSelectFolders: true,
             canSelectFiles: false,
             canSelectMany: false,
-            openLabel: 'Créer le Projet Ici'
+            openLabel: 'Sélectionner le Dossier à Uploader comme Template'
         };
 
         const folderUris = await vscode.window.showOpenDialog(options);
-
-        if (!folderUris || folderUris.length === 0) {
-            return; // Annulé
+        if (!folderUris || folderUris.length === 0){ 
+            return;
         }
         
-        const destinationPath = folderUris[0].fsPath;
-        const templateSourcePath = path.join(context.extensionPath, 'templates', selectedOption.dirName);
-
-        if (!fs.existsSync(templateSourcePath)) {
-             vscode.window.showErrorMessage(`Erreur : Le template "${selectedOption.dirName}" est introuvable.`);
-             return;
-        }
+        const sourcePath = folderUris[0].fsPath;
+        
+        // 2. EXÉCUTION DU SCRIPT PYTHON POUR L'UPLOAD
+        vscode.window.showInformationMessage('Lancement du script Python pour l\'upload R2...');
 
         try {
-            // 3. COPIE DES FICHIERS
-            copyTemplate(templateSourcePath, destinationPath);
-            vscode.window.showInformationMessage(`Template DWA : ${selectedOption.label} initialisé avec succès !`);
+            // L'extension appelle le script Python en lui passant le chemin du dossier source.
+            const pythonCommand = `python "${PYTHON_SCRIPT}" -u "${sourcePath}"`;
             
-            // 4. OUVERTURE DU NOUVEL ESPACE DE TRAVAIL
-            await vscode.commands.executeCommand('vscode.openFolder', folderUris[0]);
-
-            // 5. TÂCHES POST-INITIALISATION (si c'est le template avancé)
-            if (selectedOption.dirName === 'dwa-advanced') {
-                const terminal = vscode.window.createTerminal(`Installation Dépendances DWA (pnpm)`);
-                terminal.show();
-                // Utilisation de pnpm comme convenu
-                terminal.sendText('pnpm install'); 
-            }
+            const terminal = vscode.window.createTerminal(`Upload R2`);
+            terminal.show();
+            
+            // Exécute la commande dans le terminal et laisse le script Python gérer l'invite de saisie (nom du template)
+            terminal.sendText(pythonCommand); 
+            vscode.window.showInformationMessage(`Script d'upload lancé. Vérifiez le terminal pour les prompts (nom du template).`);
 
         } catch (error) {
-            vscode.window.showErrorMessage(`Échec de l'initialisation : ${error instanceof Error ? error.message : String(error)}`);
+            vscode.window.showErrorMessage(`Échec du lancement du script Python : ${error instanceof Error ? error.message : String(error)}`);
         }
     });
 
-    context.subscriptions.push(disposable);
+    context.subscriptions.push(disposableInit, disposableUpload);
 }
